@@ -16,9 +16,6 @@ FetchContent_Declare(httplib GIT_REPOSITORY https://github.com/yhirose/cpp-httpl
 
 FetchContent_MakeAvailable(httplib)
 
-message("http source dir: " ${httplib_SOURCE_DIR})
-message("httplib install dir: " ${CMAKE_INSTALL_LIBDIR})
-
 add_executable(qqpp)
 target_sources(qqpp PRIVATE main.cpp)
 
