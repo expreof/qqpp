@@ -7,18 +7,15 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 include(FetchContent)
 
-# 引入json解析库
-# FetchContent_Declare(json URL https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz)
-# 引入http请求库
-# FetchContent_Declare(cpr GIT_REPOSITORY https://github.com/libcpr/cpr.git GIT_TAG 1.11.0)
-# FetchContent_Declare(tabulate GIT_REPOSITORY https://github.com/p-ranav/tabulate.git GIT_TAG v1.5)
-FetchContent_Declare(httplib GIT_REPOSITORY https://github.com/yhirose/cpp-httplib.git GIT_TAG v0.18.3)
+FetchContent_Declare(httplib URL https://github.com/yhirose/cpp-httplib/archive/refs/tags/v0.19.0.tar.gz)
+FetchContent_Declare(json URL https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz)
 
 FetchContent_MakeAvailable(httplib)
+FetchContent_MakeAvailable(json)
 
 add_executable(qqpp)
 target_sources(qqpp PRIVATE main.cpp)
 
-# target_include_directories(qqpp PRIVATE ${PROJECT_SOURCE_DIR}/include)
+target_include_directories(qqpp PRIVATE ${PROJECT_SOURCE_DIR}/include)
 
-target_link_libraries(qqpp PRIVATE httplib::httplib)
+target_link_libraries(qqpp PRIVATE httplib::httplib nlohmann_json::nlohmann_json)
