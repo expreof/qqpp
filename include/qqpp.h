@@ -85,18 +85,20 @@ namespace qqpp
 
     auto Session::send_private_message(const std::string &user_id, const std::string &message) -> httplib::Result
     {
+        nlohmann::json msg_array = nlohmann::json::parse(message);
         nlohmann::json payload = {
             {"user_id", user_id},
-            {"message", message}};
-        return client.Post("/send_private_message", payload.dump(), "application/json");
+            {"message", msg_array}};
+        return client.Post("/send_private_msg", payload.dump(), "application/json");
     }
 
     auto Session::send_group_message(const std::string &group_id, const std::string &message) -> httplib::Result
     {
+        nlohmann::json msg_array = nlohmann::json::parse(message);
         nlohmann::json payload = {
             {"group_id", group_id},
-            {"message", message}};
-        return client.Post("/send_group_message", payload.dump(), "application/json");
+            {"message", msg_array}};
+        return client.Post("/send_group_msg", payload.dump(), "application/json");
     }
 
     void Session::add_event_handler(EventHandler handler)
