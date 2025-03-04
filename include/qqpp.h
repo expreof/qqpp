@@ -9,6 +9,7 @@
 #include <mutex>
 #include <condition_variable>
 #include <variant>
+#include <type_traits>
 
 #include <httplib.h>
 #include <nlohmann/json.hpp>
@@ -147,6 +148,145 @@ namespace qqpp
         std::jthread event_thread;
     };
 
+    inline namespace Message
+    {
+        class TextMessage
+        {
+        public:
+            TextMessage() = default;
+            explicit TextMessage(const std::string &text) : text{text} {}
+            explicit TextMessage(std::string &&text) : text{std::move(text)} {}
+
+            auto to_json() const -> nlohmann::json
+            {
+                nlohmann::json msg;
+                msg["type"] = "text";
+                msg["data"]["text"] = text;
+                return msg;
+            }
+            template <typename T = nlohmann::json>
+            auto serialize_to() const -> T
+            {
+                if constexpr (std::is_same_v<T, nlohmann::json>)
+                    return to_json();
+                else
+                    return T{};
+            }
+            auto get_content() const -> std::string
+            {
+                return text;
+            }
+
+        private:
+            std::string text;
+        };
+
+        class ImageMessage
+        {
+        public:
+            ImageMessage() = default;
+            explicit ImageMessage(const std::string &url) : url{url} {}
+            explicit ImageMessage(std::string &&url) : url{std::move(url)} {}
+
+            auto to_json() const -> nlohmann::json
+            {
+                nlohmann::json msg;
+                msg["type"] = "image";
+                msg["data"]["file"] = url;
+                return msg;
+            }
+
+            template <typename T = nlohmann::json>
+            auto serialize_to() const -> T
+            {
+                if constexpr (std::is_same_v<T, nlohmann::json>)
+                    return to_json();
+                else
+                    return T{};
+            }
+            auto get_content() const -> std::string
+            {
+                return url;
+            }
+
+        private:
+            std::string url;
+        };
+
+        using SingleMessage = std::variant<TextMessage, ImageMessage>;
+        class MessageArray
+        {
+        public:
+            MessageArray() = default;
+            MessageArray(const std::string &messages)
+            {
+                nlohmann::json msg_array = nlohmann::json::parse(messages);
+                for (const auto &msg : msg_array)
+                {
+                    auto message_type = msg.value("type", "");
+                    if (message_type == "text")
+                        attach(TextMessage{msg["data"]["text"].get<std::string>()});
+                    else if (message_type == "image")
+                        attach(ImageMessage{msg["data"]["url"].get<std::string>()});
+                }
+            }
+
+            auto attach(auto &&message) -> MessageArray &
+            {
+                messages.push_back(std::forward<decltype(message)>(message));
+                return *this;
+            }
+
+            // 追加消息
+            // other: 另一个消息组
+            // 返回值: 自身
+            // NOTE: 调用者负责保证 other 不是自身
+            auto attach(const MessageArray &other) -> MessageArray &
+            {
+                assert(this != &other);
+                std::ranges::copy(other.messages, std::back_inserter(messages));
+                return *this;
+            }
+
+            // 追加消息
+            // other: 另一个消息组
+            // 返回值: 自身
+            // NOTE: 调用者负责保证 other 不是自身
+            auto attach(MessageArray &&other) -> MessageArray &
+            {
+                assert(this != &other);
+                std::ranges::move(other.messages, std::back_inserter(messages));
+                return *this;
+            }
+
+            // 将消息转为可供发送的格式
+            // T: 目标格式，默认为 nlohmann::json
+            // 返回值: 消息序列化后的格式
+            // TODO: 应支持多种后端，当前仅支持 OneBot 的消息数组形式，还有 CQ 等需要支持
+            // TODO: 考虑将本函数的功能抽离出来，用一个接口类来实现，可以是调用者通过模板参数指定，也可以是运行时传入接口类实例指定
+            template <typename T = nlohmann::json>
+            auto serialize_to() const -> T
+            {
+                if constexpr (std::is_same_v<T, nlohmann::json>)
+                {
+                    T message_array;
+                    auto visitor = [&message_array](const auto &message)
+                    {
+                        message_array.push_back(message.template serialize_to<T>());
+                    };
+                    for (const auto &message : messages)
+                        std::visit(visitor, message);
+                    return message_array;
+                }
+                else
+                    return T{};
+            }
+
+        private:
+            std::vector<SingleMessage> messages;
+        };
+    } // namespace Message
+
     class Session
     {
     public:
@@ -189,13 +329,13 @@ namespace qqpp
         // user_id: 用户QQ号
         // message: 消息内容
         // 返回值: httplib::Result
-        auto send_private_message(const std::string &user_id, const std::string &message) -> httplib::Result;
+        auto send_private_message(const std::string &user_id, const MessageArray &message) -> httplib::Result;
 
         // 向群发送消息
         // group_id: 群号
         // message: 消息内容
         // 返回值: httplib::Result
-        auto send_group_message(const std::string &group_id, const std::string &message) -> httplib::Result;
+        auto send_group_message(const std::string &group_id, const MessageArray &message) -> httplib::Result;
 
         // 注册事件处理器
         template <typename EventT>
@@ -219,18 +359,18 @@ namespace qqpp
         server.listen(server_host, server_port);
     }
 
-    auto Session::send_private_message(const std::string &user_id, const std::string &message) -> httplib::Result
+    auto Session::send_private_message(const std::string &user_id, const MessageArray &message) -> httplib::Result
     {
-        nlohmann::json msg_array = nlohmann::json::parse(message);
+        nlohmann::json msg_array = message.serialize_to();
         nlohmann::json payload = {
             {"user_id", user_id},
             {"message", msg_array}};
         return client.Post("/send_private_msg", payload.dump(), "application/json");
     }
 
-    auto Session::send_group_message(const std::string &group_id, const std::string &message) -> httplib::Result
+    auto Session::send_group_message(const std::string &group_id, const MessageArray &message) -> httplib::Result
     {
-        nlohmann::json msg_array = nlohmann::json::parse(message);
+        nlohmann::json msg_array = message.serialize_to();
         nlohmann::json payload = {
             {"group_id", group_id},
             {"message", msg_array}};
