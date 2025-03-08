@@ -323,19 +323,37 @@ namespace qqpp
         }
 
         // session will listen on server_host_port
-        void run();
+        void run()
+        {
+            event_processor.run();
+            server.listen(server_host, server_port);
+        }
 
         // 向用户发送私聊消息
         // user_id: 用户QQ号
         // message: 消息内容
         // 返回值: httplib::Result
-        auto send_private_message(const std::string &user_id, const MessageArray &message) -> httplib::Result;
+        auto send_private_message(const std::string &user_id, const MessageArray &message) -> httplib::Result
+        {
+            nlohmann::json msg_array = message.serialize_to();
+            nlohmann::json payload = {
+                {"user_id", user_id},
+                {"message", msg_array}};
+            return client.Post("/send_private_msg", payload.dump(), "application/json");
+        }
 
         // 向群发送消息
         // group_id: 群号
         // message: 消息内容
         // 返回值: httplib::Result
-        auto send_group_message(const std::string &group_id, const MessageArray &message) -> httplib::Result;
+        auto send_group_message(const std::string &group_id, const MessageArray &message) -> httplib::Result
+        {
+            nlohmann::json msg_array = message.serialize_to();
+            nlohmann::json payload = {
+                {"group_id", group_id},
+                {"message", msg_array}};
+            return client.Post("/send_group_msg", payload.dump(), "application/json");
+        }
 
         // 注册事件处理器
         template <typename EventT>
@@ -352,30 +370,6 @@ namespace qqpp
 
         EventProcessor<EventType> event_processor;
     };
-
-    void Session::run()
-    {
-        event_processor.run();
-        server.listen(server_host, server_port);
-    }
-
-    auto Session::send_private_message(const std::string &user_id, const MessageArray &message) -> httplib::Result
-    {
-        nlohmann::json msg_array = message.serialize_to();
-        nlohmann::json payload = {
-            {"user_id", user_id},
-            {"message", msg_array}};
-        return client.Post("/send_private_msg", payload.dump(), "application/json");
-    }
-
-    auto Session::send_group_message(const std::string &group_id, const MessageArray &message) -> httplib::Result
-    {
-        nlohmann::json msg_array = message.serialize_to();
-        nlohmann::json payload = {
-            {"group_id", group_id},
-            {"message", msg_array}};
-        return client.Post("/send_group_msg", payload.dump(), "application/json");
-    }
 
 } // namespace qqpp
 
